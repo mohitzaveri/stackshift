@@ -40,7 +40,7 @@ Every step receives the earlier reports in full. Progress streams to the browser
 You need Node.js 22.12 or newer, and an [Anthropic API key](https://console.anthropic.com).
 
 ```bash
-git clone https://github.com/mohitzaveri06/stackshift.git
+git clone https://github.com/mohitzaveri/stackshift.git
 cd stackshift
 npm install
 cp .env.example .env.local   # then add your ANTHROPIC_API_KEY
