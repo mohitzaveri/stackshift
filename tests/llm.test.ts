@@ -81,7 +81,7 @@ describe("buildParams", () => {
       output_config: { effort: "high" },
     });
     expect(params.messages[0].content).toEqual([
-      { type: "text", text: "SNAPSHOT", cache_control: { type: "ephemeral" } },
+      { type: "text", text: "SNAPSHOT", cache_control: { type: "ephemeral", ttl: "1h" } },
       { type: "text", text: "Analyze it" },
     ]);
     expect(params).not.toHaveProperty("tools");
@@ -122,6 +122,15 @@ describe("collectText and collectSources", () => {
 
     expect(collectText(blocks)).toBe("Next.js has an official guide for this.");
     expect(collectSources(blocks)).toEqual([{ url: "https://nextjs.org/docs", title: "Next.js docs" }]);
+  });
+
+  it("joins text a fallback model continued without breaking it", () => {
+    const blocks = [
+      { type: "text", text: '{"complexity":"me', citations: null },
+      { type: "fallback", from: { model: "claude-opus-5-5" }, to: { model: "claude-opus-4-8" } },
+      { type: "text", text: 'dium"}', citations: null },
+    ] as unknown as BetaContentBlock[];
+    expect(JSON.parse(collectText(blocks))).toEqual({ complexity: "medium" });
   });
 
   it("falls back to search results when nothing is cited", () => {
@@ -165,6 +174,43 @@ describe("createClaudeClient", () => {
       cacheReadTokens: 0,
       webSearches: 2,
     });
+    // Per turn: 100 input ($4/M) + 50 output ($20/M) + 10 one-hour cache writes ($8/M) + 1 search ($0.01).
+    expect(output.costUsd).toBeCloseTo(2 * (0.0004 + 0.001 + 0.00008 + 0.01), 9);
+  });
+
+  it("prices each attempt by the model that ran it when a fallback takes over", async () => {
+    const attempt = { cache_read_input_tokens: 0, cache_creation_input_tokens: 0, cache_creation: null };
+    const { api } = fakeApi([
+      message([{ type: "text", text: "Answer.", citations: null }], {
+        model: "claude-opus-4-8",
+        usage: {
+          input_tokens: 1000,
+          output_tokens: 500,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+          server_tool_use: null,
+          iterations: [
+            { type: "message", model: null, input_tokens: 1000, output_tokens: 100, ...attempt },
+            { type: "fallback_message", model: "claude-opus-4-8", input_tokens: 1000, output_tokens: 500, ...attempt },
+          ],
+        },
+      }),
+    ]);
+    const output = await createClaudeClient({ messages: api }).run(request());
+    expect(output.model).toBe("claude-opus-4-8");
+    expect(output.usage.outputTokens).toBe(600);
+    // Opus 5.5 attempt ($4/$20 per M) plus the Opus 4.8 attempt ($5/$25 per M).
+    expect(output.costUsd).toBeCloseTo(0.004 + 0.002 + 0.005 + 0.0125, 9);
+  });
+
+  it("keeps a cut-off report but says it was cut off", async () => {
+    const { api } = fakeApi([message([{ type: "text", text: "## Plan\nPhase 1", citations: null }], { stop_reason: "max_tokens" })]);
+    const activity: string[] = [];
+    const output = await createClaudeClient({ messages: api }).run(request({ step: "plan" }), {
+      onActivity: (m) => activity.push(m),
+    });
+    expect(output.text).toBe("## Plan\nPhase 1\n\n> **Note:** This report was cut off because it reached the length limit.");
+    expect(activity).toEqual(["This report was cut off because it reached the length limit."]);
   });
 
   it("reports refusals, empty answers and cut-off JSON as errors", async () => {

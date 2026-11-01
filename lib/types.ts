@@ -53,6 +53,10 @@ export interface Source {
 export interface RepoRef {
   owner: string;
   repo: string;
+  /** From a /tree/<branch>/... link. Defaults to the repository's default branch. */
+  branch?: string;
+  /** From a /tree/<branch>/<path> link: analyze only this folder. */
+  path?: string;
 }
 
 export interface RepoFile {
@@ -71,7 +75,10 @@ export interface FileContent {
 export interface RepoSnapshot {
   ref: RepoRef;
   url: string;
-  defaultBranch: string;
+  /** The branch that was read. */
+  branch: string;
+  /** The folder that was read, or null for the whole repository. */
+  path: string | null;
   description: string | null;
   stars: number;
   license: string | null;
@@ -87,8 +94,10 @@ export interface RepoSnapshot {
 export interface Technology {
   name: string;
   version?: string;
-  /** The file the technology was found in. */
+  /** The file the technology was found in (the most important one, if several list it). */
   source: string;
+  /** How many files list it, when more than one does. */
+  count?: number;
 }
 
 /** Facts measured from the repository by code, not by the AI. */
@@ -96,7 +105,9 @@ export interface RepoFacts {
   owner: string;
   name: string;
   url: string;
-  defaultBranch: string;
+  branch: string;
+  /** The folder that was analyzed, or null for the whole repository. */
+  path: string | null;
   description: string | null;
   stars: number;
   license: string | null;
@@ -105,8 +116,12 @@ export interface RepoFacts {
   sourceFiles: number;
   testFiles: number;
   estimatedLines: number;
+  /** Source files left out of the line count because they're very large or generated. */
+  linesExcludedFiles: number;
   languages: Array<{ name: string; percent: number }>;
+  /** The most important manifests, up to 20. */
   manifests: string[];
+  manifestCount: number;
   technologies: Technology[];
   filesRead: number;
   treeTruncated: boolean;
@@ -156,7 +171,10 @@ export interface AnalysisResult {
   repo: RepoFacts;
   targetStack: string;
   demo: boolean;
+  /** The model that was requested. */
   model: string;
+  /** Models that actually answered; includes fallback models if any step used one. */
+  servedBy: string[];
   reports: Record<ReportId, string>;
   estimate: ComputedEstimate;
   sources: Source[];

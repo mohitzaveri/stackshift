@@ -31,6 +31,7 @@ interface RepoFixture {
   description: string;
   languages: Record<string, number>;
   files: Record<string, string>;
+  private?: boolean;
 }
 
 /** Builds the GitHub API and raw-content routes for a small public repository. */
@@ -46,7 +47,7 @@ export function repoRoutes(fixture: RepoFixture): Record<string, FakeRoute> {
         stargazers_count: 12,
         license: { spdx_id: "MIT", name: "MIT License" },
         pushed_at: "2025-12-09T06:53:36Z",
-        private: false,
+        private: fixture.private ?? false,
       },
     },
     [`${api}/languages`]: { body: fixture.languages },
@@ -89,6 +90,24 @@ export const reactApp: RepoFixture = {
     "src/App.test.js": "test('renders', () => {});\n",
     "node_modules/react/index.js": "module.exports = {};\n",
     "public/logo.png": "PNG",
+  },
+};
+
+export const monorepo: RepoFixture = {
+  owner: "acme",
+  repo: "platform",
+  description: "A monorepo",
+  languages: { TypeScript: 9000 },
+  files: {
+    "README.md": "# Platform",
+    "package.json": JSON.stringify({ private: true, devDependencies: { turbo: "^2.5.8" } }),
+    "pnpm-workspace.yaml": "packages:\n  - apps/*\ncatalog:\n  next: ^16.0.0\n",
+    "turbo.json": "{}",
+    "apps/web/README.md": "# Web app",
+    "apps/web/package.json": JSON.stringify({ dependencies: { next: "catalog:" } }),
+    "apps/web/src/page.tsx": "export default function Page() {\n  return null;\n}\n",
+    "apps/api/package.json": JSON.stringify({ dependencies: { express: "^5.0.0" } }),
+    "apps/api/src/server.ts": "app.listen(3000);\n",
   },
 };
 

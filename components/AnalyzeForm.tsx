@@ -62,7 +62,10 @@ export function AnalyzeForm({
           value={repoUrl}
           onChange={(e) => setRepoUrl(e.target.value)}
         />
-        <span className="hint">Public repositories work right away. Private ones need a GITHUB_TOKEN on the server.</span>
+        <span className="hint">
+          Public repositories work right away. To analyze one part of a monorepo, link to its folder
+          (…/tree/main/apps/web).
+        </span>
       </label>
 
       <div className="field">

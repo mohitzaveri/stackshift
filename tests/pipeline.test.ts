@@ -9,8 +9,15 @@ import { estimateDraft, fakeFetch, flaskApi, reactApp, repoRoutes } from "./fixt
 const STACK_REPORT = `## Current stack\n${"Details about the code. ".repeat(400)}\nEND-OF-STACK-REPORT`;
 const RESEARCH_REPORT = `## Migration research\n${"Findings from the guides. ".repeat(300)}\nEND-OF-RESEARCH`;
 
-/** A fake Claude that records every request and answers each step with canned text. */
-function recordingClient(overrides: Partial<Record<StepId, string>> = {}) {
+/**
+ * A fake Claude that records every request and answers each step with canned text. Each step
+ * costs $0.02 (research $0.05); `fallback` makes one step answered by another model, and
+ * `unpriced` makes one step's cost unknown.
+ */
+function recordingClient(
+  overrides: Partial<Record<StepId, string>> = {},
+  options: { fallback?: StepId; unpriced?: StepId } = {},
+) {
   const requests: AgentRequest[] = [];
   const answers: Partial<Record<StepId, string>> = {
     stack: STACK_REPORT,
@@ -30,7 +37,8 @@ function recordingClient(overrides: Partial<Record<StepId, string>> = {}) {
         text,
         sources: request.step === "research" ? [{ url: "https://nextjs.org/docs/app/guides", title: "Next.js guide" }] : [],
         usage: { inputTokens: 1000, outputTokens: 500, cacheWriteTokens: 0, cacheReadTokens: 0, webSearches: request.step === "research" ? 3 : 0 },
-        model: "claude-opus-5-5",
+        costUsd: request.step === options.unpriced ? null : request.step === "research" ? 0.05 : 0.02,
+        model: request.step === options.fallback ? "claude-opus-4-8" : "claude-opus-5-5",
       };
     },
   };
@@ -106,13 +114,23 @@ describe("runAnalysis", () => {
     ]);
     expect(run.events.at(-1)).toEqual({ type: "result", result });
     expect(run.events.some((e) => e.type === "delta" && e.step === "estimate" && e.text.includes("## Summary"))).toBe(true);
+    // The summary counts the files that matter (node_modules is left out).
+    expect(run.events).toContainEqual({ type: "step", step: "repo", status: "done", summary: "8 files found, 5 read" });
 
     expect(result.reports.research).toContain("[Next.js guide](https://nextjs.org/docs/app/guides)");
     expect(result.estimate.totalHoursLow).toBe(18);
     expect(result.usage).toEqual({ inputTokens: 4000, outputTokens: 2000, cacheWriteTokens: 0, cacheReadTokens: 0, webSearches: 3 });
-    // 4,000 input tokens at $4/M + 2,000 output tokens at $20/M + 3 searches at $0.01
-    expect(result.costUsd).toBeCloseTo(0.016 + 0.04 + 0.03, 6);
+    expect(result.costUsd).toBeCloseTo(0.02 + 0.05 + 0.02 + 0.02, 9);
+    expect(result.servedBy).toEqual(["claude-opus-5-5"]);
     expect(result.repo.technologies.map((t) => t.name)).toContain("Create React App (react-scripts)");
+  });
+
+  it("records fallback models, and leaves the cost unknown if any step's price is", async () => {
+    const fake = recordingClient({}, { fallback: "research", unpriced: "plan" });
+    const result = await runAnalysis(input, deps(fake.client).deps);
+    expect(result.model).toBe("claude-opus-5-5");
+    expect(result.servedBy).toEqual(["claude-opus-5-5", "claude-opus-4-8"]);
+    expect(result.costUsd).toBeNull();
   });
 
   it("names the step that failed", async () => {

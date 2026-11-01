@@ -9,6 +9,7 @@ import { RunView, newRunState, type RunState } from "@/components/RunView";
 import { parseRepoUrl } from "@/lib/github";
 import { addToHistory, loadHistory, removeFromHistory } from "@/lib/history";
 import { readNdjson } from "@/lib/ndjson";
+import { repoLabel } from "@/lib/report";
 import { STEPS, type AnalysisResult, type PipelineEvent, type StepId } from "@/lib/types";
 
 interface ServerInfo {
@@ -105,7 +106,8 @@ export default function Home() {
     abortRef.current = controller;
     pendingText.current = {};
     setLastValues(values);
-    setView({ kind: "running", run: newRunState(ref ? `${ref.owner}/${ref.repo}` : values.repoUrl, values.targetStack) });
+    const label = ref ? repoLabel({ owner: ref.owner, name: ref.repo, path: ref.path }) : values.repoUrl;
+    setView({ kind: "running", run: newRunState(label, values.targetStack) });
     window.scrollTo({ top: 0 });
 
     try {

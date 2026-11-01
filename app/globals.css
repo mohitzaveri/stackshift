@@ -751,6 +751,11 @@ input:focus {
   margin-right: 6px;
 }
 
+.image-placeholder {
+  color: var(--muted);
+  font-size: 0.9em;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

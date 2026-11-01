@@ -1,4 +1,5 @@
 import { emptyUsage } from "./cost";
+import { describeTechnology } from "./detect";
 import { formatNumber } from "./format";
 import type { AgentHooks, AgentRequest, DemoHints, LlmClient } from "./llm";
 import type { EstimateDraft } from "./estimate";
@@ -8,7 +9,7 @@ const BANNER =
   "The repository facts in it are real. Add `ANTHROPIC_API_KEY` and turn off `DEMO_MODE` for a real analysis.";
 
 function technologies(hints: DemoHints): string {
-  const list = hints.facts.technologies.map((t) => `- ${t.name}${t.version ? ` ${t.version}` : ""} (in \`${t.source}\`)`);
+  const list = hints.facts.technologies.map((tech) => `- ${describeTechnology(tech)}`);
   return list.length ? list.join("\n") : "- No recognized frameworks in the manifests.";
 }
 
@@ -18,7 +19,7 @@ function stackReport({ facts, targetStack }: DemoHints): string {
 
 ## Overview
 
-**${facts.owner}/${facts.name}**: ${facts.description ?? "no description on GitHub."}
+**${facts.owner}/${facts.name}${facts.path ? `/${facts.path}` : ""}**: ${facts.description ?? "no description on GitHub."}
 
 ## What the files show
 
@@ -132,7 +133,7 @@ export function createDemoClient(options: { delayMs?: number } = {}): LlmClient 
     async run(request: AgentRequest, hooks: AgentHooks = {}) {
       if (request.jsonSchema) {
         await sleep(delayMs * 40, hooks.signal);
-        return { text: JSON.stringify(demoEstimate(request.demo)), sources: [], usage: emptyUsage(), model: "demo" };
+        return { text: JSON.stringify(demoEstimate(request.demo)), sources: [], usage: emptyUsage(), costUsd: 0, model: "demo" };
       }
       if (request.step === "research") hooks.onActivity?.(`Demo mode: skipping the web search for “${request.demo.targetStack}”`);
       const text =
@@ -142,7 +143,7 @@ export function createDemoClient(options: { delayMs?: number } = {}): LlmClient 
             ? researchReport(request.demo)
             : planReport(request.demo);
       await streamOut(text, hooks, delayMs);
-      return { text, sources: [], usage: emptyUsage(), model: "demo" };
+      return { text, sources: [], usage: emptyUsage(), costUsd: 0, model: "demo" };
     },
   };
 }

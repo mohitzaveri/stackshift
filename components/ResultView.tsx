@@ -8,11 +8,12 @@ import {
   formatDuration,
   formatNumber,
   formatRange,
+  formatRate,
   formatUsd,
   formatUsdPrecise,
   formatWeeks,
 } from "@/lib/format";
-import { REPORT_ORDER, buildFullReport, downloadText, reportFileName } from "@/lib/report";
+import { REPORT_ORDER, buildFullReport, downloadText, modelLabel, repoLabel, reportFileName } from "@/lib/report";
 import { REPORT_TITLES, type AnalysisResult, type ReportId } from "@/lib/types";
 
 function Stat({ label, value, note }: { label: string; value: string; note: string }) {
@@ -48,12 +49,12 @@ export function ResultView({ result, onNew }: { result: AnalysisResult; onNew: (
           <p className="eyebrow">Migration report</p>
           <h2>
             <a href={result.repo.url} target="_blank" rel="noopener noreferrer">
-              {result.repo.owner}/{result.repo.name}
+              {repoLabel(result.repo)}
             </a>{" "}
             <span className="arrow">→</span> {result.targetStack}
           </h2>
           <p className="muted">
-            {new Date(result.createdAt).toLocaleString()} · {result.demo ? "Demo mode (no AI)" : result.model}
+            {new Date(result.createdAt).toLocaleString()} · {result.demo ? "Demo mode (no AI)" : modelLabel(result)}
           </p>
         </div>
         <div className="header-actions">
@@ -83,7 +84,7 @@ export function ResultView({ result, onNew }: { result: AnalysisResult; onNew: (
         <Stat
           label="Cost"
           value={formatRange(estimate.costLow, estimate.costHigh, formatUsd)}
-          note={`At ${formatUsd(estimate.hourlyRate)} per hour`}
+          note={`At ${formatRate(estimate.hourlyRate)} per hour`}
         />
         <Stat
           label="Timeline"

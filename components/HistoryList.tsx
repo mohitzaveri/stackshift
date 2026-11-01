@@ -1,5 +1,6 @@
 "use client";
 
+import { repoLabel } from "@/lib/report";
 import type { AnalysisResult } from "@/lib/types";
 
 export function HistoryList({
@@ -20,7 +21,7 @@ export function HistoryList({
           <li key={entry.id}>
             <button className="history-item" onClick={() => onOpen(entry)}>
               <span className="history-title">
-                {entry.repo.owner}/{entry.repo.name} → {entry.targetStack}
+                {repoLabel(entry.repo)} → {entry.targetStack}
               </span>
               <span className="muted">
                 {new Date(entry.createdAt).toLocaleDateString()}
@@ -29,7 +30,7 @@ export function HistoryList({
             </button>
             <button
               className="icon-button"
-              aria-label={`Remove ${entry.repo.owner}/${entry.repo.name} from history`}
+              aria-label={`Remove ${repoLabel(entry.repo)} from history`}
               onClick={() => onRemove(entry.id)}
             >
               ×

@@ -1,4 +1,4 @@
-import { addUsage, emptyUsage, estimateCostUsd } from "./cost";
+import { addCosts, addUsage, emptyUsage } from "./cost";
 import { computeFacts } from "./detect";
 import { StepError } from "./errors";
 import { computeEstimate, parseEstimate, renderEstimateMarkdown } from "./estimate";
@@ -42,6 +42,8 @@ export async function runAnalysis(input: AnalysisInput, deps: PipelineDeps): Pro
   const effort = deps.effort ?? "high";
   const startedAt = now();
   let usage = emptyUsage();
+  let costUsd: number | null = 0;
+  const servedBy = new Set<string>();
 
   async function step<T>(id: StepId, work: () => Promise<T>, summary?: (result: T) => string): Promise<T> {
     signal?.throwIfAborted();
@@ -62,15 +64,19 @@ export async function runAnalysis(input: AnalysisInput, deps: PipelineDeps): Pro
       onActivity: (message) => emit({ type: "activity", step: request.step, message }),
     });
     usage = addUsage(usage, output.usage);
+    costUsd = addCosts(costUsd, output.costUsd);
+    servedBy.add(output.model);
     return output;
   }
 
-  const snapshot = await step(
+  const { snapshot, facts } = await step(
     "repo",
-    () => fetchRepoSnapshot(input.repo, { ...deps.github, signal }),
-    (s) => `${formatNumber(s.files.length)} files found, ${s.contents.length} read`,
+    async () => {
+      const snapshot = await fetchRepoSnapshot(input.repo, { ...deps.github, signal });
+      return { snapshot, facts: computeFacts(snapshot) };
+    },
+    ({ facts }) => `${formatNumber(facts.totalFiles)} files found, ${facts.filesRead} read`,
   );
-  const facts = computeFacts(snapshot);
   const context = buildSnapshotText(snapshot, facts);
   const hints: DemoHints = { targetStack: input.targetStack, facts };
 
@@ -108,11 +114,12 @@ export async function runAnalysis(input: AnalysisInput, deps: PipelineDeps): Pro
     targetStack: input.targetStack,
     demo: llm.demo,
     model: llm.model,
+    servedBy: [...servedBy],
     reports: { stack: stack.text, research: research.text, estimate: estimate.markdown, plan: plan.text },
     estimate: estimate.computed,
     sources: research.sources,
     usage,
-    costUsd: llm.demo ? 0 : estimateCostUsd(llm.model, usage),
+    costUsd,
     durationMs: now() - startedAt,
   };
   emit({ type: "result", result });

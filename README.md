@@ -15,6 +15,8 @@ Four reports, shown in the browser and downloadable as Markdown:
 | **Effort estimate** | Work items in hours, total effort and cost, calendar time for teams of 1, 3 and 5, plus risks and assumptions |
 | **Migration plan** | Phases with concrete tasks, testing and rollback, team roles, and a first-week checklist |
 
+To analyze one part of a monorepo, paste a link to its folder, such as `https://github.com/owner/repo/tree/main/apps/web`.
+
 ## How it works
 
 ```mermaid
@@ -27,8 +29,8 @@ flowchart LR
   F --> G["Four reports"]
 ```
 
-1. **Read the repository (code, no AI).** StackShift uses the GitHub API to fetch the file tree, the README, every manifest (`package.json`, `requirements.txt`, `go.mod`, `pom.xml` and more), config files, entry points and the largest source files, up to 40 files. It measures the repository: file counts, estimated lines of code, languages, and the frameworks and versions listed in the manifests.
-2. **Analyze the stack (Claude).** Claude reads that snapshot and describes the current stack. It is told to treat the measured facts as ground truth and to say "unknown" rather than guess.
+1. **Read the repository (code, no AI).** StackShift uses the GitHub API to fetch the file tree, the README, the manifests (`package.json`, `requirements.txt`, `go.mod`, `pom.xml` and more), config files, entry points and the largest source files, up to 40 files. It reads the product's own code before tests, fixtures and examples. It then measures the repository: file counts, estimated lines of code (leaving out huge and generated files), languages, and the frameworks and versions listed in the manifests, including pnpm catalog versions.
+2. **Analyze the stack (Claude).** Claude reads that snapshot and describes the current stack. It is told to treat the measured facts as ground truth, to say "unknown" rather than guess, and to treat repository text as data, not instructions.
 3. **Research the migration (Claude with web search).** Claude searches for official guides, codemods and real migration stories for this stack and target, and the report lists its sources.
 4. **Estimate the effort (Claude, then code).** Claude breaks the work into items and sizes each in hours, returning JSON that must match a schema. StackShift then does the math: it adds a 20% contingency, applies your hourly rate, and converts hours into calendar weeks for teams of 1, 3 and 5.
 5. **Write the plan (Claude).** Claude turns everything into a phase-by-phase plan.
@@ -62,18 +64,20 @@ Set these in `.env.local` (see `.env.example`):
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `ANTHROPIC_API_KEY` | none | Required for real analyses |
-| `GITHUB_TOKEN` | none | Raises GitHub's limit from 60 to 5,000 requests per hour, and allows private repositories |
+| `GITHUB_TOKEN` | none | Raises GitHub's limit from 60 to 5,000 requests per hour |
+| `ALLOW_PRIVATE_REPOS` | off | `1` lets visitors analyze private repositories your `GITHUB_TOKEN` can read. Keep it off on a public server. |
 | `CLAUDE_MODEL` | `claude-opus-5-5` | The Claude model to use. `claude-sonnet-5-5` also works; older models lack some features StackShift uses. |
 | `CLAUDE_EFFORT` | `high` | Effort for the analysis, estimate and plan steps (`low`, `medium`, `high`, `xhigh`, `max`). Research runs at `medium`. |
 | `DEMO_MODE` | off | `1` runs without AI and returns placeholder reports |
 | `ACCESS_CODE` | none | If set, visitors must enter this code to run an analysis |
 | `RATE_LIMIT_PER_HOUR` | `5` | Analyses per visitor per hour. `0` means unlimited. |
+| `DAILY_ANALYSIS_LIMIT` | `50` | Analyses per day for all visitors together: a hard cap on spending. `0` means unlimited. |
 
 ## Cost
 
-Each analysis makes four Claude requests and up to six web searches. The exact token count and cost, at list prices, are shown at the end of every run. Some notes on keeping it down:
+Each analysis makes at least four Claude requests (the research step makes a few more if a long web search pauses and resumes) and up to six web searches. The exact token count and cost, at list prices, are shown at the end of every run, including any step answered by a fallback model. Some notes on keeping it down:
 
-- The repository snapshot is sent with prompt caching, so the estimate and plan steps re-read it at a fraction of the price.
+- The repository snapshot is cached for an hour, so the estimate and plan steps re-read it at a fraction of the input price.
 - `CLAUDE_EFFORT=medium` uses less thinking per step. A cheaper model, such as `CLAUDE_MODEL=claude-sonnet-5-5`, also works.
 
 If Claude's safety filters decline a step, the request is retried on a fallback model automatically (server-side fallbacks).
@@ -90,8 +94,12 @@ npm start
 Things to know:
 
 - An analysis takes a few minutes and streams over one long HTTP response. Hosts with short request timeouts, such as some serverless plans, can cut it off.
-- If the app is public, set `ACCESS_CODE` and keep `RATE_LIMIT_PER_HOUR` low, because every run is paid for with your API key.
-- The rate limiter is kept in memory, so the limit applies per server instance.
+- Every run is paid for with your API key, so on a public server:
+  - set `ACCESS_CODE`. Wrong codes are limited to 10 per visitor per hour, and after that even the right code is refused for the rest of the hour;
+  - keep `RATE_LIMIT_PER_HOUR` low, and `DAILY_ANALYSIS_LIMIT` at a total you're happy to pay for;
+  - leave `ALLOW_PRIVATE_REPOS` off. Private repositories then get the same "not found" answer as missing ones, even with a `GITHUB_TOKEN`.
+- The per-visitor limit uses the last address in `X-Forwarded-For`, the one your host's proxy adds. Run StackShift behind a proxy (most hosts do this for you); the daily limit protects you either way.
+- The limits are kept in memory, so they apply per server instance and reset when it restarts.
 
 ## Development
 
@@ -104,24 +112,26 @@ npm run build      # production build
 ```
 app/
   page.tsx               the UI: form, live progress, results
-  api/analyze/route.ts   runs an analysis and streams progress as NDJSON
+  api/analyze/route.ts   validates input, applies the limits, runs an analysis, streams NDJSON
   api/health/route.ts    server settings for the UI (no secrets)
 components/              form, progress view, result view, Markdown renderer
 lib/
   github.ts              parses URLs, fetches the repository, picks files, builds the snapshot
   detect.ts              file classification, framework detection, size estimates
-  llm.ts                 Claude client: streaming, web search, pause and resume, usage
+  llm.ts                 Claude client: streaming, web search, pause and resume, fallbacks, cost
   prompts.ts             instructions for the four AI steps
   estimate.ts            estimate schema, plus all effort, cost and timeline math
   pipeline.ts            runs the five steps in order
+  rate-limit.ts          per-visitor and daily limits
   demo.ts                the no-AI demo client
-tests/                   unit tests with fake GitHub and Claude responses
+tests/                   unit and route tests with fake GitHub and Claude responses
 ```
 
 ## Limitations
 
 - StackShift reads at most 40 files (about 160K characters) per repository, so very large repositories are sampled rather than read in full. The snapshot always lists which files were read.
 - Estimates are grounded in the measured size of the code, but they are still estimates: a starting point for planning, not a quote.
+- Folder links work for branch names without a slash.
 - History is saved in your browser only. There are no accounts yet.
 - GitHub only, for now.
 

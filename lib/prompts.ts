@@ -1,3 +1,4 @@
+import { describeTechnology } from "./detect";
 import { estimateJsonSchema } from "./estimate";
 import type { AgentRequest, DemoHints, Effort } from "./llm";
 import type { RepoFacts } from "./types";
@@ -9,9 +10,7 @@ function tagged(tag: string, text: string): string {
 
 function technologyList(facts: RepoFacts): string {
   if (!facts.technologies.length) return "None recognized in the manifests.";
-  return facts.technologies
-    .map((tech) => `- ${tech.name}${tech.version ? ` ${tech.version}` : ""} (in ${tech.source})`)
-    .join("\n");
+  return facts.technologies.map((tech) => `- ${describeTechnology(tech)}`).join("\n");
 }
 
 export function stackRequest(snapshot: string, demo: DemoHints, effort: Effort): AgentRequest {

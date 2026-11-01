@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AgentError } from "./errors";
-import { capitalize, formatRange, formatUsd, formatWeeks } from "./format";
+import { capitalize, formatRange, formatRate, formatUsd, formatWeeks } from "./format";
 import type { ComputedEstimate, TeamTimeline } from "./types";
 
 /** Buffer added on top of the AI's hours for things nobody saw coming. */
@@ -103,8 +103,8 @@ export function computeEstimate(draft: EstimateDraft, hourlyRate: number): Compu
     totalHoursLow,
     totalHoursHigh,
     hourlyRate,
-    costLow: totalHoursLow * hourlyRate,
-    costHigh: totalHoursHigh * hourlyRate,
+    costLow: Math.round(totalHoursLow * hourlyRate),
+    costHigh: Math.round(totalHoursHigh * hourlyRate),
     timelines,
   };
 }
@@ -119,7 +119,7 @@ export function renderEstimateMarkdown(estimate: ComputedEstimate): string {
     "",
     `- **Complexity:** ${capitalize(estimate.complexity)}. ${estimate.complexityReason}`,
     `- **Total effort:** ${formatRange(estimate.totalHoursLow, estimate.totalHoursHigh)} hours, including a ${estimate.contingencyPercent}% contingency`,
-    `- **Cost:** ${formatRange(estimate.costLow, estimate.costHigh, formatUsd)} at ${formatUsd(estimate.hourlyRate)} per hour`,
+    `- **Cost:** ${formatRange(estimate.costLow, estimate.costHigh, formatUsd)} at ${formatRate(estimate.hourlyRate)} per hour`,
     `- **Confidence:** ${capitalize(estimate.confidence)}`,
     "",
     "## Timeline by team size",

@@ -45,6 +45,13 @@ describe("computeEstimate", () => {
     expect(estimate.baseHoursHigh).toBe(26);
   });
 
+  it("rounds cost to whole dollars and shows a fractional rate with its cents", () => {
+    const estimate = computeEstimate(estimateDraft, 87.35);
+    expect(estimate.costLow).toBe(1572); // 18 h × $87.35 = $1,572.30
+    expect(estimate.costHigh).toBe(3145); // 36 h × $87.35 = $3,144.60
+    expect(renderEstimateMarkdown(estimate)).toContain("$1,572–$3,145 at $87.35 per hour");
+  });
+
   it("gives bigger teams fewer weeks, with coordination overhead", () => {
     expect(weeksFor(600, 1)).toBe(20);
     expect(weeksFor(600, 5)).toBe(6.5); // 4 weeks of work, plus 60% overhead, rounded up to half a week

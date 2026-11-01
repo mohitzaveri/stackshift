@@ -1,7 +1,13 @@
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+const usdCents = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 
 export function formatUsd(amount: number): string {
   return usd.format(amount);
+}
+
+/** An hourly rate: whole dollars when it's a whole number, otherwise with cents ($87.35). */
+export function formatRate(rate: number): string {
+  return Number.isInteger(rate) ? usd.format(rate) : usdCents.format(rate);
 }
 
 /** Small amounts, like the cost of one analysis, with cents. */
